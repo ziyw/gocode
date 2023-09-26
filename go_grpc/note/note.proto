@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "github.com/ziyw/gocode/go_grpc/note";
+
+package go_grpc;
+
+service NoteService {
+    rpc GetNote(NoteRequest) returns (NoteResponse) {}
+}
+
+message NoteRequest {
+    int32 id = 1;
+}
+
+message NoteResponse {
+    string title = 1;
+    string content = 2;
+}
