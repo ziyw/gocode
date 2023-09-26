@@ -10,3 +10,6 @@ psql -U ziyan
   2 | Entry 2     | Second try                | 2023-09-13 20:50:11.487881
   3 | Entry three | Third time is a charm     | 2023-09-13 20:50:57.312694
 (3 rows)
+
+INSERT INTO note(title, content, created_at) 
+VALUES ('DevNote', 'Should be very small', CURRENT_TIMESTAMP);
