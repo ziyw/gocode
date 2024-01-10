@@ -22,6 +22,11 @@ func TestReverse(t *testing.T) {
 	}
 }
 
+// To run fuzz test:
+// go test -fuzz=Fuzz -fuzztime 30s
+// go test -fuzz=Fuzz
+// go test -run=FuzzReverse
+
 func FuzzReverse(f *testing.F) {
 	testcases := []string{"Hello, world", " ", "!12345"}
 	for _, tc := range testcases {
