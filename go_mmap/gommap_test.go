@@ -5,16 +5,16 @@ import (
 	"testing"
 )
 
-func TestLoadMemoryMapFile(t *testing.T) {
-	// fileName := "mmap_file"
-	// // prepare mmap file
-	// want := []byte("HelloWorld!!!\n")
-	// os.WriteFile(fileName, want, 0644)
+// func TestLoadMemoryMapFile(t *testing.T) {
+// 	fileName := "mmap_file"
+// 	want := []byte("HelloWorld!!!\n")
+// 	os.WriteFile(fileName, want, 0644)
 
-	// got, _ := loadMemoryMapFile(fileName, 0, 100)
+// 	// TODO: fix this reading size to dynamic
+// 	got, _ := loadMemoryMapFile(fileName, 0, 14)
 
-	// assert.Equal(t, want, got)
-}
+// 	assert.Equal(t, want, got)
+// }
 
 func TestPersistHashMap(t *testing.T) {
 
@@ -29,16 +29,26 @@ func TestEncodeNumToBytes(t *testing.T) {
 }
 
 func TestHashMapItemEncode(t *testing.T) {
-
-	keyValue := "Hello There!"
-	item := HashMapItem{
-		keySize:   28,
-		key:       keyValue,
-		valueSize: 4,
-		value:     123,
+	p := PersistHashMap{
+		"mmap.file",
+		nil,
 	}
 
-	out := item.encode()
-	fmt.Print(string(out[:28]))
+	p.HashMap = make(map[string]int)
+	p.HashMap["hello"] = 1
+	p.HashMap["world"] = 2
+	p.HashMap["what"] = 3
+	p.HashMap["ever"] = 4
 
+	p.persist()
+}
+
+func TestHashMapLoad(t *testing.T) {
+	p := PersistHashMap{
+		"mmap.file",
+		nil,
+	}
+	addr, _ := p.load(300)
+	p.initHashMap(addr)
+	fmt.Print(p.HashMap)
 }
