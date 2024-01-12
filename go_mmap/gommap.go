@@ -4,23 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"syscall"
 )
 
-const ITEM_SIZE = 32
-const METADATA_SIZE = 4 // use 2 bytes to save key lenght and value lenght meta data
+const METADATA_SIZE = 4
 
-type PersistHashMap struct {
-	mmapFile string
-	HashMap  map[string]int
-}
-
-func (p PersistHashMap) load(size int) ([]byte, error) {
-	file, err := os.Open(p.mmapFile)
+func loadMmap(filename string, size int) ([]byte, error) {
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -35,34 +27,18 @@ func (p PersistHashMap) load(size int) ([]byte, error) {
 	return addr, nil
 }
 
-func (p *PersistHashMap) initHashMap(in []byte) {
-	p.HashMap = make(map[string]int)
-
-	hashMeta := decodeBytesToNum(in[:METADATA_SIZE])
-
-	offset := METADATA_SIZE
-
-	for i := uint32(0); i < hashMeta; i++ {
-		itemMeta := decodeBytesToNum(in[offset : offset+METADATA_SIZE])
-		k, v := decode(in[offset+METADATA_SIZE : offset+METADATA_SIZE+int(itemMeta)])
-		fmt.Printf("(%s: %d)", k, v)
-		p.HashMap[k] = v
-		offset = offset + METADATA_SIZE + int(itemMeta)
-	}
-}
-
-func (p PersistHashMap) persist() {
+func persist(filename string, hashmap map[string]int) {
 	// remove old file
-	old, _ := os.Stat(p.mmapFile)
+	old, _ := os.Stat(filename)
 	if old != nil {
-		e := os.Remove(p.mmapFile)
+		e := os.Remove(filename)
 		if e != nil {
 			log.Fatal(e)
 		}
 	}
 
 	// flush hashmap to file
-	file, err := os.Create(p.mmapFile)
+	file, err := os.Create(filename)
 	if err != nil {
 		log.Fatal()
 	}
@@ -70,24 +46,91 @@ func (p PersistHashMap) persist() {
 
 	// create buffered writer to persist hashmap content
 	bw := bufio.NewWriter(file)
+	byteArr := encodeHashMap(hashmap)
+	bw.Write(byteArr)
 
-	// write metadata first: number of items in hashmap
-	fmeta := encodeNumToBytes(uint32(len(p.HashMap)), METADATA_SIZE)
-	bw.Write(fmeta)
-
-	for k, v := range p.HashMap {
-		content := encode(k, v)
-		meta := encodeNumToBytes(uint32(len(content)), METADATA_SIZE)
-		item := append(meta, content...)
-		bw.Write(item)
-	}
-
-	err = bw.Flush()
-	if err != nil {
+	if err = bw.Flush(); err != nil {
 		log.Fatal(err)
 	}
 }
 
+// encode and decode string-int hashmap to byte array
+func encodeHashMap(hashMap map[string]int) []byte {
+	byteArr := []byte{}
+	byteArr = append(byteArr, encodeNumToBytes(uint32(len(hashMap)), METADATA_SIZE)...)
+
+	for key, value := range hashMap {
+		b := encodeStrToByteArr(key)
+		b = append(b, encodeIntToByteArr(value)...)
+		byteArr = append(byteArr, b...)
+	}
+	return byteArr
+}
+
+func decodeByteArrToHashMap(byteArr []byte) map[string]int {
+	hashMap := make(map[string]int)
+
+	n := int(decodeBytesToNum(byteArr[:METADATA_SIZE]))
+	offset := METADATA_SIZE
+	for i := 0; i < n; i++ {
+		key, nxt := decodeByteArrToString(byteArr, offset)
+		value, nxt := decodeByteArrToInt(byteArr, nxt)
+		hashMap[key] = value
+		offset = nxt
+	}
+	return hashMap
+}
+
+// Encode and decode  string to byte array
+func encodeStrToByteArr(in string) []byte {
+	// String Metadat: 4 bytes content length, variable content size
+	content := []byte(in)
+	meta := encodeNumToBytes(uint32(len(in)), METADATA_SIZE)
+	return append(meta, content...)
+}
+
+func decodeByteArrToString(byteArr []byte, offset int) (string, int) {
+	meta := decodeBytesToNum(byteArr[offset : offset+METADATA_SIZE])
+	contentOffset := offset + METADATA_SIZE
+	contentStop := contentOffset + int(meta)
+	str := string(byteArr[offset+METADATA_SIZE : contentStop])
+	return str, contentStop
+}
+
+// Encode and decode int to byte array
+func encodeIntToByteArr(in int) []byte {
+	// metadata: 4 bytes content lenght, 1 byte sign flag, 4 byte unsign int value
+	// TODO: change this to use one bit
+	var flag byte
+	var content []byte
+	if in > 0 {
+		flag = 0
+		content = encodeNumToBytes(uint32(in), METADATA_SIZE)
+	} else {
+		flag = 255
+		content = encodeNumToBytes(uint32(-in), METADATA_SIZE)
+	}
+	meta := encodeNumToBytes(uint32(len(content)), METADATA_SIZE)
+	meta = append(meta, flag)
+	return append(meta, content...)
+}
+
+func decodeByteArrToInt(byteArr []byte, offset int) (int, int) {
+	meta := decodeBytesToNum(byteArr[offset : offset+METADATA_SIZE])
+	flag := byteArr[offset+METADATA_SIZE : offset+METADATA_SIZE+1][0]
+
+	contentOffset := offset + METADATA_SIZE + 1
+	contentStop := contentOffset + int(meta)
+
+	content := int(decodeBytesToNum(byteArr[contentOffset:contentStop]))
+	if flag == 255 {
+		return -1 * content, contentStop
+	}
+	return content, contentStop
+}
+
+// Fundamental: encode uint32 to bytes and decode bytes to uint32
+// These two are used in all meta data handling
 func encodeNumToBytes(num uint32, size int) []byte {
 	output := make([]byte, size)
 	binary.LittleEndian.PutUint32(output, uint32(num))
@@ -102,40 +145,4 @@ func decodeBytesToNum(input []byte) uint32 {
 		log.Fatal(err)
 	}
 	return num
-}
-
-func intToString(num int) string {
-	return fmt.Sprintf("%d", num)
-}
-
-func stringToInt(str string) int {
-	i, err := strconv.Atoi(str)
-	if err != nil {
-		panic(err)
-	}
-	return i
-}
-
-func encode(key string, val int) []byte {
-	kBytes := []byte(key)
-	kmeta := encodeNumToBytes(uint32(len(kBytes)), METADATA_SIZE)
-	encoded := append(kmeta, kBytes...)
-
-	// metadata is the lenght of the value
-	vBytes := []byte(intToString(val))
-	vmeta := encodeNumToBytes(uint32(len(vBytes)), METADATA_SIZE)
-	encoded = append(encoded, vmeta...)
-	encoded = append(encoded, vBytes...)
-	return encoded
-}
-
-func decode(in []byte) (string, int) {
-	kmeta := decodeBytesToNum(in[:METADATA_SIZE])
-	key := string(in[METADATA_SIZE : METADATA_SIZE+kmeta])
-
-	voffset := METADATA_SIZE + kmeta
-	vmeta := decodeBytesToNum(in[voffset : voffset+METADATA_SIZE])
-	value := stringToInt(string(in[voffset+METADATA_SIZE : voffset+METADATA_SIZE+vmeta]))
-
-	return key, value
 }

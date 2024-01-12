@@ -2,53 +2,74 @@ package gommap
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
 
-// func TestLoadMemoryMapFile(t *testing.T) {
-// 	fileName := "mmap_file"
-// 	want := []byte("HelloWorld!!!\n")
-// 	os.WriteFile(fileName, want, 0644)
+func TestEncodeNum(t *testing.T) {
+	tests := []struct {
+		input uint32
+		want  uint32
+	}{
+		{input: 12, want: 12},
+		{input: 0, want: 0},
+		{input: 255, want: 255},
+	}
 
-// 	// TODO: fix this reading size to dynamic
-// 	got, _ := loadMemoryMapFile(fileName, 0, 14)
-
-// 	assert.Equal(t, want, got)
-// }
-
-func TestPersistHashMap(t *testing.T) {
-
-}
-
-func TestEncodeNumToBytes(t *testing.T) {
-	var want uint32 = 65594
-	got := decodeBytesToNum(encodeNumToBytes(uint32(want), 4))
-	if got != want {
-		t.Errorf("Input %d doesn't match encode result %d", want, got)
+	for i, tc := range tests {
+		got := decodeBytesToNum(encodeNumToBytes(tc.input, 4))
+		if !reflect.DeepEqual(tc.want, got) {
+			t.Fatalf("test %d: expected: %v, got: %v\n", i+1, tc.want, got)
+		}
 	}
 }
 
-func TestHashMapItemEncode(t *testing.T) {
-	p := PersistHashMap{
-		"mmap.file",
-		nil,
+func TestEncodeString(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "Hello", want: "Hello"},
+		{input: "", want: ""},
+		{input: "This is a very long string !", want: "This is a very long string !"},
 	}
 
-	p.HashMap = make(map[string]int)
-	p.HashMap["hello"] = 1
-	p.HashMap["world"] = 2
-	p.HashMap["what"] = 3
-	p.HashMap["ever"] = 4
-
-	p.persist()
+	for i, tc := range tests {
+		got, _ := decodeByteArrToString(encodeStrToByteArr(tc.input), 0)
+		fmt.Printf("test %d: expected: %v, got: %v\n", i+1, tc.want, got)
+		if !reflect.DeepEqual(tc.want, got) {
+			t.Fatalf("test %d: expected: %v, got: %v\n", i+1, tc.want, got)
+		}
+	}
 }
 
-func TestHashMapLoad(t *testing.T) {
-	p := PersistHashMap{
-		"mmap.file",
-		nil,
+func TestEncodeInt(t *testing.T) {
+	tests := []struct {
+		input int
+		want  int
+	}{
+		{input: 12, want: 12},
+		{input: 0, want: 0},
+		{input: -10, want: -10},
 	}
-	addr, _ := p.load(300)
-	p.initHashMap(addr)
-	fmt.Print(p.HashMap)
+
+	for i, tc := range tests {
+		got, _ := decodeByteArrToInt(encodeIntToByteArr(tc.input), 0)
+		fmt.Printf("test %d: expected: %v, got: %v\n", i+1, tc.want, got)
+		if !reflect.DeepEqual(tc.want, got) {
+			t.Fatalf("test %d: expected: %v, got: %v\n", i+1, tc.want, got)
+		}
+	}
+}
+
+func TestEncodeHashMap(t *testing.T) {
+	input := make(map[string]int)
+	input["Hello"] = 10
+	input["world"] = 0
+	input["Whatever long key length"] = -20
+
+	got := decodeByteArrToHashMap(encodeHashMap(input))
+	if !reflect.DeepEqual(input, got) {
+		t.Fatalf("test encodedHashMap: expected: %v, got: %v\n", input, got)
+	}
 }
